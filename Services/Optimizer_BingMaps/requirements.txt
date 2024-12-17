@@ -1,0 +1,5 @@
+ortools==9.7.2996
+aiohttp==3.8.6
+aiofiles==23.2.1
+azure-functions==1.17.0
+opencensus-ext-azure==1.1.9

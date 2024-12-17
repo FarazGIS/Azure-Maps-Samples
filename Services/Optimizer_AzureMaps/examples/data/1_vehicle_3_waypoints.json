@@ -1,0 +1,24 @@
+{
+    "vehicles": [
+        {
+            "id": "vehicle1",
+            "profile": "car",
+            "start": [-122.328895, 47.601727],
+            "end": [-122.228906, 47.591838]
+       }
+    ],
+    "waypoints": [
+        {
+            "id": "waypoint1",
+            "location": [-122.302370, 47.6016348]
+        },
+        {
+            "id": "waypoint2",
+            "location": [-122.329170, 47.586250]
+        },
+        {
+            "id": "waypoint3",
+            "location": [-122.298110, 47.586342]
+        }
+    ]
+}

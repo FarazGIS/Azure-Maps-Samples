@@ -1,0 +1,384 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Optimize Itinerary</title>
+    <meta charset="utf-8" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="" />
+    <meta name="keywords" content="Microsoft maps, map, gis, API, SDK, Bing, Bing Maps" />
+    <meta name="author" content="Microsoft Enterprise Maps" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+    <!-- Add references to the Azure Maps Map control JavaScript and CSS files. -->
+    <link href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/3/atlas.min.css" rel="stylesheet" />
+    <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/3/atlas.min.js"></script>
+    <!-- Add a reference to the Azure Maps Services Module JavaScript file. -->
+    <script src="https://atlas.microsoft.com/sdk/javascript/service/2/atlas-service.min.js"></script>
+
+    <script>
+
+        var map, datasource, routePoints = [];
+        var routeColors = ['#2272B9', '#ff7b25', '#6b5b95', '#d64161', '#00cc66', '#000000'];
+        var restRoutingRequestUrl = 'https://{azMapsDomain}/route/directions/json?api-version=1&query={query}';
+
+        function GetMap() {
+            //Initialize a map instance.
+            console.log()
+            map = new atlas.Map('myMap', {
+                center: [-122.327,47.607],
+                zoom: 12,
+                //Add authentication details for connecting to Azure Maps.
+                authOptions: {
+                    //Use Azure Active Directory authentication.
+                    authType: 'subscriptionKey',
+                    subscriptionKey: 'your_key' //Your Azure Maps client id for accessing your Azure Maps account.
+                }
+            });
+
+            //Wait until the map resources are ready.
+            map.events.add('ready', function () {
+                datasource = new atlas.source.DataSource();
+                map.sources.add(datasource);
+
+                map.layers.add(new atlas.layer.LineLayer(datasource, null, {
+                    //strokeColor: colors[(colorRouteIndex % 10)],
+                    strokeColor: ['to-color', ['at', ['get', 'resultIndex'], ['literal', routeColors]]],
+                    strokeWidth: 6
+                }));
+
+                map.layers.add(new atlas.layer.SymbolLayer(datasource, null, {
+                        textOptions: {
+                            textField: ['get', 'title'],
+                            offset: [0, -1.2],
+                            color: 'white'
+                        },
+                        filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']] //Only render Point or MultiPoints in this layer.
+                    }));
+
+            });
+
+            document.getElementById('Manual').style.display = "block";
+            document.getElementById('tabManual').style.backgroundColor = "#ddd";
+        }
+
+        function getRoute() {
+            $('#resultTableRows').html('');
+            url = document.getElementById('request').value;
+            dataJSON = document.getElementById('requestBody').value;
+            $.ajax(
+                {
+                    url: url,
+                    type: 'POST',
+                    dataType: "json",
+                    data: dataJSON,
+                    success: function (result) {
+                        console.log(result);
+                        rsp = result;
+                        updateResultTable(rsp);
+                        drawMap(rsp);
+                    },
+                    error: function (xhr, status, error) {
+                        console.log("getRoute() error: " + xhr.responseText);
+                    }
+                });
+        }
+
+        function drawMap(rsp) {
+            var pushpin = [];
+            var colorRouteIndex = 0;
+            jQuery.ajaxSetup({ async: false });
+
+            $.each(rsp.result, function (i, item) {
+                var name = item.id;
+                var routeRequest = restRoutingRequestUrl.replace('{query}',item.locations[0].location[1] + ',' + item.locations[0].location[0]);
+                for (var j = 0; j < item.locations.length; j++) {
+                    pushpin.push(new atlas.data.Feature(new atlas.data.Point(item.locations[j].location), {
+                        title: j + 1 + ''
+                    }));
+                    routeRequest = routeRequest + ':' + item.locations[j].location[1] + ',' + item.locations[j].location[0];
+                }
+
+                var td = $("#resultTableRows td:contains('" + name + "')");
+                routeRequest = routeRequest + ':' + item.locations[item.locations.length-1].location[1] + ',' + item.locations[item.locations.length-1].location[0];
+
+                //Process the request and render the route result on the map.
+                processRequest(routeRequest).then(response => {
+                var routeCoordinates = [];
+                var route = response.routes[0];
+                for (var legIndex = 0; legIndex < route.legs.length; legIndex++) {
+                    var leg = route.legs[legIndex];
+
+                    //Convert the route point data into a format that the map control understands.
+                    var legCoordinates = leg.points.map(function (point) {
+                        return [point.longitude, point.latitude];
+                    });
+
+                    //Combine the route point data for each route leg together to form a single path.
+                    routeCoordinates = routeCoordinates.concat(legCoordinates);
+                }
+               
+                var routeLine = new atlas.data.Feature(new atlas.data.LineString(routeCoordinates));
+                routeLine.properties.resultIndex = i;
+                datasource.add(routeLine);
+                
+                routePoints = routePoints.concat(routeCoordinates);
+                map.setCamera({
+                bounds: atlas.data.BoundingBox.fromPositions(routePoints),
+                padding: 50
+                });
+
+                //set name cell color to match route
+                $("#resultTableRows td:contains('" + name + "')").css('background-color', routeColors[(colorRouteIndex % 10)]);
+                colorRouteIndex++;
+                });
+            });
+
+            datasource.add(pushpin); 
+        }
+
+        function updateResultTable(rsp) {
+            let itemRows = '';
+            let agentNumber = 0;
+
+            $.each(rsp.result, function (i, item) {
+                let stop = 0;
+                let shift = 1;
+                ++agentNumber;
+                $.each(item.locations, function (j, locationInfo) {
+                    itemRows += '<tr>' +
+                        '<td>' + (++stop) + '</td>' +
+                        '<td>' + item.id + '</td>';
+                    //itemRows += '<td>' + "StartTime" + '</td>' +
+                    //    '<td>' + "Duration" + '</td>' +
+                    //    '<td>' + "EndTime" + '</td>';
+                    itemRows += '<td>' + ((locationInfo.id === undefined) ? " " : locationInfo.id) + '</td>' +
+                        //'<td>' + "Priority" + '</td>' +
+                        '<td>' + locationInfo.location[0].toFixed(5) + ', ' + locationInfo.location[1].toFixed(5) + '</td>' +
+                        //'<td>' + "Quantity" + '</td>' +
+                        //'<td>' + "DropOffFrom" + '</td>' +
+                        '</tr>';
+                });
+            });
+            $('#resultTableRows').html(itemRows);
+        }
+
+        function processRequest(url) {
+        //This is a reusable function that sets the Azure Maps platform domain, sings the request, and makes use of any transformRequest set on the map.
+        return new Promise((resolve, reject) => {
+            //Replace the domain placeholder to ensure the same Azure Maps cloud is used throughout the app.
+            url = url.replace('{azMapsDomain}', atlas.getDomain());
+
+            //Get the authentication details from the map for use in the request.
+            var requestParams = map.authentication.signRequest({ url: url });
+
+            //Transform the request.
+            var transform = map.getServiceOptions().tranformRequest;
+            if (transform) {
+                requestParams = transform(url);
+            }
+
+            fetch(requestParams.url, {
+                method: 'GET',
+                mode: 'cors',
+                headers: new Headers(requestParams.headers)
+            })
+                .then(r => r.json(), e => reject(e))
+                .then(r => {
+                    resolve(r);
+                }, e => reject(e));
+        });
+    }
+    </script>
+
+    <style>
+        html, body {
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+            height: 100%;
+        }
+
+        .mioContainer {
+            width: 400px;
+            height: 64%;
+            overflow-y: auto;
+            float: left;
+        }
+
+        #request {
+            width: 360px;
+        }
+
+        #requestKey {
+            width: 360px;
+        }
+
+        #requestBody {
+            width: 360px;
+        }
+
+        #myMap {
+            position: relative;
+            width: calc(100% - 400px);
+            height: 65%;
+            float: left;
+        }
+
+        #itineraryContainer {
+            width: 100%;
+            height: 35%;
+            overflow: auto;
+        }
+
+        #itinerary {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: small;
+        }
+            #itinerary td, #itinerary th {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+
+            #itinerary tr:nth-child(even) {
+                background-color: whitesmoke;
+            }
+
+            #itinerary tr:hover {
+                background-color: #ddd;
+            }
+
+            #itinerary th {
+                padding-top: 12px;
+                padding-bottom: 12px;
+                text-align: left;
+                background-color: lightgrey;
+                color: black;
+                font-size: small;
+            }
+
+        /* Tab */
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+
+            /* Buttons inside the tab */
+            .tab button {
+                background-color: inherit;
+                float: left;
+                border: none;
+                outline: none;
+                cursor: pointer;
+                padding: 14px 16px;
+                transition: 0.3s;
+            }
+
+        /* Tab content */
+        .tabcontent {
+            display: none;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-bottom: none;
+        }
+
+        #unusedItinerary {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: small;
+        }
+
+            #unusedItinerary td, #unusedItinerary th {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+
+            #unusedItinerary tr:nth-child(even) {
+                background-color: whitesmoke;
+            }
+
+            #unusedItinerary tr:hover {
+                background-color: #ddd;
+            }
+
+            #unusedItinerary th {
+                padding-top: 12px;
+                padding-bottom: 12px;
+                text-align: left;
+                background-color: lightgrey;
+                color: black;
+                font-size: small;
+            }
+
+    </style>
+</head>
+<body onload="GetMap()">
+    <div class="mioContainer">
+        <div class="tab">
+            <button class="tablinks" id="tabManual">Manual Request</button>
+        </div>
+        <div id="Manual" class="tabcontent">
+            <label for="request"><h4>Enter Multi-Itinerary POST Request</h></label><br />
+            <textarea id="request" name="requestContainer" rows="1" cols="45">https://miodemo.azurewebsites.net/api/mio</textarea><br />
+            <label for="requestBody"><h>Enter Request Body</h></label><br />
+            <textarea id="requestBody" name="bodyContainer" rows="25" cols="40">{
+    "vehicles": [
+        {
+            "id": "vehicle1",
+            "profile": "car",
+            "start": [-122.328895, 47.601727],
+            "end": [-122.228906, 47.591838]
+        },
+        {
+            "id": "vehicle2",
+            "profile": "car",
+            "start": [-122.302783, 47.608029],
+            "end": [-122.312894, 47.618140]
+        }
+    ],
+    "waypoints": [
+        {
+            "id": "waypoint1",
+            "location": [-122.302370, 47.6016348]
+        },
+        {
+            "id": "waypoint2",
+            "location": [-122.329170, 47.586250]
+        },
+        {
+            "id": "waypoint3",
+            "location": [-122.298110, 47.586342]
+        }
+    ]
+}</textarea>
+            <button type="button" onclick="getRoute()">Get Routes</button>
+        </div>
+    </div>
+    <div id="myMap">
+    </div>
+    <div id="itineraryContainer">
+        <label id="resultStops" class="c-label">Result Stops</label>
+        <table id="itinerary">
+            <thead>
+                <tr>
+                    <th scope="col">Stop</th>
+                    <th scope="col">Agent</th>
+                    <!-- <th scope="col">Start Time</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">End Time</th> -->
+                    <th scope="col">Location Name</th>
+                    <!-- <th scope="col">Priority</th> -->
+                    <th scope="col">Location</th>
+                    <!-- <th scope="col">Quantity</th>
+                    <th scope="col">Drop Off</th> -->
+                </tr>
+            </thead>
+            <tbody id="resultTableRows">
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
