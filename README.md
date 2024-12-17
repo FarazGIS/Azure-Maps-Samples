@@ -34,8 +34,10 @@ Use of the following software and library is required:
 5. Create Azure function to build an API that returns the travel itinerary for the given set of agents and stops. The code sample implements the vehicle Routing problem for multiple drivers for the best optimal path.
 6. In MIO.html, find the string “https://miodemo.azurewebsites.net” and replace “miodemo” with the Function App name. For example, if the app name is “optimize”, then the new string will be “https://optimize.azurewebsites.net”
 7. Under the applications settings of the newly created Function app, add the following key-value pairs. To access App settings, login to Microsoft Azure portal >your function app > Settings > Environment variables.
-   - Bing Maps - BME_KEY = <Bing Maps Developer Key, get one for free on Bing Maps Dev Center>. This BME_KEY will be used to make requests to the Bing Maps Distance Matrix API.
-   - Azure Maps - API_KEY = <Azure Maps Subscription Key> You will need to create an Azure Maps account to get the subscription key if you don’t have an account. This API_KEY will be used to make requests to the Azure Maps Route Matrix API. Additionally in MIO.html,        find the string "your-key" and replace it with the Azure Maps subscription key for the app authentication.
+   - For Bing Maps
+     <br />BME_KEY = <Bing Maps Developer Key, get one for free on Bing Maps Dev Center>. This BME_KEY will be used to make requests to the Bing Maps Distance Matrix API.
+   - Azure Maps
+     <br />API_KEY = <Azure Maps Subscription Key> You will need to create an Azure Maps account to get the subscription key if you don’t have an account. This API_KEY will be used to make requests to the Azure Maps Route Matrix API. Additionally in MIO.html,        find the string "your-key" and replace it with the Azure Maps subscription key for the app authentication.
 8. (Optional) This step is optional if you want to write logs of your Azure function for debugging. if you don't want to create it, you can modify the init_log() function under utils/log.py to comment the part about Azure Application Insights.
    <br /><br />MIO_APPINSIGHT_CONN_STRING=<Connection String of Application Insight, you need to create an Application Insights resource on Azure and get the connection string>
 9. In VS Code, open the Azure workspace, select the Azure Functions option, and select Deploy to Function App to deploy your solution to Azure.
