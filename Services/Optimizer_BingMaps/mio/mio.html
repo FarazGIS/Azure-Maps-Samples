@@ -1,0 +1,343 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Optimize Itinerary Demo</title>
+
+    <meta charset="utf-8" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="" />
+    <meta name="keywords" content="Microsoft maps, map, gis, API, SDK, Bing, Bing Maps" />
+    <meta name="author" content="Microsoft Enterprise Maps" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+    <script>
+
+        var map;
+        var directionsManager;
+        var colors = ['#2272B9', '#ff7b25', '#00bcf2 ', '#00B294', 'Chartreuse', 'LightSkyBlue', 'cyan', 'LightSalmon', 'Blue', 'Sienna', 'DarkKhaki'];
+        var resultStopLayer, routeLayer, infobox;
+
+        function GetMap() {
+            map = new Microsoft.Maps.Map('#myMap', {
+                center: new Microsoft.Maps.Location(34.088322, -117.208011),
+                mapTypeId: Microsoft.Maps.MapTypeId.road,
+                zoom: 12
+            });
+            resultStopLayer = new Microsoft.Maps.Layer();
+            routeLayer = new Microsoft.Maps.Layer();
+            map.layers.insert(resultStopLayer);
+            map.layers.insert(routeLayer);
+            infobox = new Microsoft.Maps.Infobox(new Microsoft.Maps.Location(0.0, 0.0), { visible: false });
+            infobox.setMap(map);
+        }
+
+        function updateMapKey() {
+            var key = document.getElementById("requestKey").value;
+            document.getElementById("mapScript").setAttribute("src", `https://www.bing.com/api/maps/mapcontrol?&setLang=en-US&callback=GetMap&key=${key}`);
+        }
+
+        function getRoute() {
+            $('#resultTableRows').html('');
+            resultStopLayer.clear();
+            routeLayer.clear();
+            infobox.setOptions({ visible: false });
+            url = document.getElementById('request').value;
+            dataJSON = document.getElementById('requestBody').value;
+            $.ajax(
+                {
+                    url: url,
+                    type: 'POST',
+                    dataType: "json",
+                    data: dataJSON,
+                    success: function (result) {
+                        console.log(result);
+                        rsp = result;
+                        updateResultTable(rsp);
+                        drawMap(rsp);
+                    },
+                    error: function (xhr, status, error) {
+                        console.log("getRoute() error: " + xhr.responseText);
+                    }
+                });
+        }
+
+        function drawMap(rsp) {
+            console.log("Inside draw Map function");
+            var key = document.getElementById("requestKey").value;
+            var locations = [];
+
+            var colorStopIndex = 0, colorRouteIndex = 0;
+            jQuery.ajaxSetup({ async: false });
+            $.each(rsp.result, function (i, item) {
+                var name = item.id;
+                var wpIndex = 0;
+                var routeRequest = 'https://dev.virtualearth.net/REST/V1/Routes?key=' + key + '&optmz=distance&routeAttributes=routePath&wp.' + wpIndex + '=' + item.locations[0].location[1] + ',' + item.locations[0].location[0];
+                var stopIndex = 0;
+
+                $.each(item.locations, function (j, location) {
+                    var iconsvg = '<svg xmlns = "http://www.w3.org/2000/svg" width="40" height="40"><g transform="translate(20,20)"><circle cx="0" cy="0" r="10" stroke-width="1" stroke="yellow" fill="{color}" /></g></svg>';
+                    var pushpin = new Microsoft.Maps.Pushpin(new Microsoft.Maps.Location(location.location[1], location.location[0]), {
+                        icon: iconsvg,
+                        text: '' + (stopIndex + 1),
+                        textOffset: new Microsoft.Maps.Point(0, 12.5),
+                        color: colors[(colorStopIndex % 10)],
+                        anchor: new Microsoft.Maps.Point(20, 20)
+                    });
+                    pushpin.metadata = {
+                        agent: item.id,
+                        location: location.id,
+                        stop: (stopIndex + 1)
+                    };
+
+                    Microsoft.Maps.Events.addHandler(pushpin, 'click', function (e) {
+                        infobox.setOptions({
+                            location: e.target.getLocation(),
+                            offset: new Microsoft.Maps.Point(0, 10),
+                            title: e.target.metadata.agent + ' stop ' + e.target.metadata.stop + ': ' + e.target.metadata.location,
+                            visible: true,
+                            showPointer: true,
+                            maxHeight: 175,
+                            maxWidth: 350
+                        });
+                    });
+                    stopIndex++;
+
+                    resultStopLayer.add(pushpin);
+                    locations.push(pushpin.getLocation());
+                    routeRequest = routeRequest + '&wp.' + (++wpIndex) + '=' + location.location[1] + ',' + location.location[0];
+                }
+                );
+                colorStopIndex++;
+
+                var td = $("#resultTableRows td:contains('" + name + "')");
+                routeRequest = routeRequest + '&wp.' + (++wpIndex) + '=' + item.locations[item.locations.length-1].location[1] + ',' + item.locations[item.locations.length-1].location[0];
+
+                $.get(routeRequest, function (data) {
+                    var routePts = [];
+                    $.each(data.resourceSets[0].resources[0].routePath.line.coordinates, function (k, coord) {
+                        routePts.push(new Microsoft.Maps.Location(coord[0], coord[1]));
+                    });
+                    var polyline = new Microsoft.Maps.Polyline(routePts, { strokeColor: colors[(colorRouteIndex % 10)], strokeThickness: 4 });
+                    polyline.metadata = { 'name': name.replace(' ', '-') };
+                    // set name cell color to match route
+                    $("#resultTableRows td:contains('" + name + "')").css('background-color', colors[(colorRouteIndex % 10)]);
+
+                    routeLayer.add(polyline);
+                    colorRouteIndex++;
+                    locations = locations.concat(routePts);
+                });
+
+                map.setView({ bounds: Microsoft.Maps.LocationRect.fromLocations(locations) });
+            });
+            jQuery.ajaxSetup({ async: true });
+        }
+
+        function updateResultTable(rsp) {
+            let itemRows = '';
+            let agentNumber = 0;
+
+            $.each(rsp.result, function (i, item) {
+                let stop = 0;
+                let shift = 1;
+                ++agentNumber;
+                $.each(item.locations, function (j, locationInfo) {
+                    itemRows += '<tr>' +
+                        '<td>' + (++stop) + '</td>' +
+                        '<td>' + item.id + '</td>';
+                    //itemRows += '<td>' + "StartTime" + '</td>' +
+                    //    '<td>' + "Duration" + '</td>' +
+                    //    '<td>' + "EndTime" + '</td>';
+                    itemRows += '<td>' + ((locationInfo.id === undefined) ? " " : locationInfo.id) + '</td>' +
+                        //'<td>' + "Priority" + '</td>' +
+                        '<td>' + locationInfo.location[0].toFixed(5) + ', ' + locationInfo.location[1].toFixed(5) + '</td>' +
+                        //'<td>' + "Quantity" + '</td>' +
+                        //'<td>' + "DropOffFrom" + '</td>' +
+                        '</tr>';
+                });
+            });
+            $('#resultTableRows').html(itemRows);
+        }
+    </script>
+
+    <style>
+        html, body {
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+            height: 100%;
+        }
+
+        .mioContainer {
+            width: 400px;
+            height: 64%;
+            overflow-y: auto;
+            float: left;
+        }
+
+        #request {
+            width: 360px;
+        }
+
+        #requestKey {
+            width: 360px;
+        }
+
+        #requestBody {
+            width: 360px;
+        }
+
+        #myMap {
+            position: relative;
+            width: calc(100% - 400px);
+            height: 65%;
+            float: left;
+        }
+
+        #itineraryContainer {
+            width: 100%;
+            height: 35%;
+            overflow: auto;
+        }
+
+        #itinerary {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: small;
+        }
+            #itinerary td, #itinerary th {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+
+            #itinerary tr:nth-child(even) {
+                background-color: whitesmoke;
+            }
+
+            #itinerary tr:hover {
+                background-color: #ddd;
+            }
+
+            #itinerary th {
+                padding-top: 12px;
+                padding-bottom: 12px;
+                text-align: left;
+                background-color: lightgrey;
+                color: black;
+                font-size: small;
+            }
+
+        /* Tab */
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+
+            /* Buttons inside the tab */
+            .tab button {
+                background-color: inherit;
+                float: left;
+                border: none;
+                outline: none;
+                cursor: pointer;
+                padding: 14px 16px;
+                transition: 0.3s;
+            }
+
+        /* Tab content */
+        .tabcontent {
+            display: none;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-bottom: none;
+        }
+
+        #Manual{
+            display:block
+        }
+
+        #tabManual{
+            background-color: #ddd;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="mioContainer">
+        <div class="tab">
+            <button class="tablinks" id="tabManual">Manual Request</button>
+        </div>
+        <div id="Manual" class="tabcontent">
+            <label for="request"><h4>Enter Multi-Itinerary POST Request</h></label><br />
+            <textarea id="request" name="requestContainer" rows="1" cols="45">https://miodemo.azurewebsites.net/api/mio</textarea><br />
+            <label for="requestKey"><h4>Bing Maps API Key</h></label><br />
+            <textarea id="requestKey" name="keyContainer" rows="2" cols="45" onchange="updateMapKey()" placeholder="Get free one from https://www.bingmapsportal.com/" required="true"></textarea><br />
+            <label for="requestBody"><h>Enter Request Body</h></label><br />
+            <textarea id="requestBody" name="bodyContainer" rows="19" cols="40">{
+    "vehicles": [
+        {
+            "id": "vehicle1",
+            "profile": "car",
+            "start": [-122.328895, 47.601727],
+            "end": [-122.228906, 47.591838]
+        },
+        {
+            "id": "vehicle2",
+            "profile": "car",
+            "start": [-122.302783, 47.608029],
+            "end": [-122.312894, 47.618140]
+        }
+    ],
+    "waypoints": [
+        {
+            "id": "waypoint1",
+            "location": [-122.302370, 47.6016348]
+        },
+        {
+            "id": "waypoint2",
+            "location": [-122.329170, 47.586250]
+        },
+        {
+            "id": "waypoint3",
+            "location": [-122.298110, 47.586342]
+        }
+    ]
+}</textarea>
+            <button type="button" onclick="getRoute()">Get Routes</button>
+        </div>
+    </div>
+    <div id="myMap">
+    </div>
+    <div id="itineraryContainer">
+        <label id="resultStops" class="c-label">Result Stops</label>
+        <table id="itinerary">
+            <thead>
+                <tr>
+                    <th scope="col">Stop</th>
+                    <th scope="col">Agent</th>
+                    <!-- <th scope="col">Start Time</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">End Time</th> -->
+                    <th scope="col">Location Name</th>
+                    <!-- <th scope="col">Priority</th> -->
+                    <th scope="col">Location</th>
+                    <!-- <th scope="col">Quantity</th>
+                    <th scope="col">Drop Off</th> -->
+                </tr>
+            </thead>
+            <tbody id="resultTableRows">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        (async () => {
+            let script = document.createElement("script");
+            script.setAttribute("id", "mapScript");
+            document.body.appendChild(script);
+        })();
+    </script>
+</body>
+</html>
