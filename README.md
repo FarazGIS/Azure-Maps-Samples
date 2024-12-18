@@ -46,7 +46,7 @@ Note: The sample supports assigning stops to multiple agents delivering multiple
 
 # Usage
 The code sample contains an html page that you can use to request the endpoint and visualize the results on a map. To see the results.
-- Browse https://<your function app name>.azurewebsites.net/mioui for the sample html and use https://<your function app name>.azurewebsites.net/api/mio to access the endpoint.
+- Browse https://your-function-app-name.azurewebsites.net/mioui for the sample html and use https://your-function-app-name.azurewebsites.net/api/mio to access the endpoint.
 - For Bing Maps.
    - In the sample application, enter your Bing Maps dev key.
    - Note: The sample uses Bing Maps base map data and Route service to get route for the agents.
