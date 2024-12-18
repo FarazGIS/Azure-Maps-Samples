@@ -16,7 +16,7 @@ When requesting the cost matrix, it is necessary to pass all the waypoints as or
 # Prerequisites
 Use of the following software and library is required:
 
-- OR tools – The solution uses OR tools for the optimiser. The package can be installed from Install OR-Tools. The library used in the solution is OR Tools for Python. This guide is to help you get started with an open-source library. You could use any open-source solution of your choice that best suits your requirements.
+- OR tools – The solution uses OR tools for the optimizer. The library used in the solution is OR Tools for Python. This guide is to help you get started with an open-source library. You could use any open-source solution of your choice that best suits your requirements.
 - Distance Matrix – You can use Bing Maps Distance Matrix or Azure Maps Route Matrix based on your preference.
 - Azure Tools Extension for VS Code – Can be downloaded from Azure Tools.
 - Application Insights (optional) – To write logs and monitor your function app for debugging.
