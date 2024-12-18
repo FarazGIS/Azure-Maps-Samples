@@ -1,3 +1,4 @@
+# Itinerary Optimization using open source library
 # How to get started
 Itinerary optimization is a two-step process that requires a travel cost matrix and an optimization engine to find the best outcome. A cost matrix represents the cost of traveling between every two set of locations in the problem. It can be calculated using the Bing Maps Distance Matrix or Azure Maps Route Matrix service.
 
